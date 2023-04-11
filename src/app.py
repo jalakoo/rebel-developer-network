@@ -21,6 +21,36 @@ def star_wars_systems():
     system_names = [s['Planet'] for s in STAR_WARS_SYSTEMS]
     return system_names
 
+def find_developers(
+    team_size: int,
+    req_skills: list[str],
+    base: str,
+    distance: int,
+    reb_affinity: float
+) -> list[str]:
+    query = f"""
+    MATCH (t:Topic)<-[r:KNOWS]-(p:Person)-[f:FROM]->(s:System), (o:System)-[d:CONNECTED_TO*1..{distance}]->(o2:System)
+    WHERE t.name in $req_skills AND o2.name = $base AND o.name = s.name
+    RETURN DISTINCT p.name as name, s.name as homeworld LIMIT $team_size
+"""
+    params = {
+        'req_skills': req_skills,
+        'base': base,
+        'team_size': team_size
+    }
+    records = execute_query(query, params)
+    if records is None:
+        return []
+    
+    result = []
+    for r in records:
+        result.append({
+            'name': r.get('name'),
+            'homeworld': r.get('homeworld')
+        })
+    return result
+
+
 # UI
 # Convulted way to center image
 col1, col2, col3 = st.columns([1,1,1])
@@ -58,7 +88,15 @@ with t2:
         reb_affinity = st.select_slider("Political Affinity", ["Imperial", "Imperial Sympathetic", "Neutral", "Rebel Sympathetic", "Rebel"], value = "Neutral")
     
     # TODO:
-    # Display suggested rebel developers
+    if st.button("Find Rebel Developers"):
+        developers = find_developers(
+            team_size, 
+            req_skills, 
+            base, 
+            distance, 
+            reb_affinity)
+        # Display suggested rebel developers
+        st.json(developers)
 
 # Using ChatGPT like search
 # with t2:
