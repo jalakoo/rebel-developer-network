@@ -21,6 +21,18 @@ def star_wars_systems():
     system_names = [s['Planet'] for s in STAR_WARS_SYSTEMS]
     return system_names
 
+def affinity_as_float(affinity:str)-> float:
+    if affinity == "Imperial":
+        return 0.0
+    elif affinity == "Imperial Sympathetic":
+        return 0.25
+    elif affinity == "Neutral":
+        return 0.5
+    elif affinity == "Rebel Sympathetic":
+        return 0.75
+    else:
+        return 1.0
+
 def find_developers(
     team_size: int,
     req_skills: list[str],
@@ -28,11 +40,19 @@ def find_developers(
     distance: int,
     reb_affinity: float
 ) -> list[str]:
-    query = f"""
-    MATCH (t:Topic)<-[r:KNOWS]-(p:Person)-[f:FROM]->(s:System), (o:System)-[d:CONNECTED_TO*1..{distance}]->(o2:System)
-    WHERE t.name in $req_skills AND o2.name = $base AND o.name = s.name
-    RETURN DISTINCT p.name as name, s.name as homeworld LIMIT $team_size
-"""
+    
+    # query = f"""
+    # MATCH (t:Topic)<-[r:KNOWS]-(p:Person)-[f:FROM]->(s:System), (o:System)-[d:CONNECTED_TO*1..{distance}]->(o2:System), (p)-[:KNOWS]->(c:Character)
+    # WHERE t.name in $req_skills AND o2.name = $base AND o.name = s.name
+    # RETURN DISTINCT p.name as name, s.name as homeworld LIMIT $team_size
+# """
+    query =f"""
+    MATCH (t:Topic)<-[r:KNOWS]-(p:Person)-[f:FROM]->(s:System), (o:System)-[d:CONNECTED_TO*1..{distance}]->(o2:System), (p)-[:KNOWS]->(c:Character)
+    WHERE t.name in $req_skills AND o2.name = $base AND o.name = s.name 
+    WITH p, t, s, c, avg(c.rebel_affinity) as avg_affinity
+    WHERE avg_affinity >= {reb_affinity}
+    RETURN DISTINCT p.name as name, s.name as homeworld, t as skills, c as associates, avg_affinity LIMIT $team_size
+    """
     params = {
         'req_skills': req_skills,
         'base': base,
@@ -46,7 +66,10 @@ def find_developers(
     for r in records:
         result.append({
             'name': r.get('name'),
-            'homeworld': r.get('homeworld')
+            'homeworld': r.get('homeworld'),
+            'skills': r.get('skills'),
+            'associates': r.get('associates'),
+            'affinity': r.get('avg_affinity')
         })
     return result
 
@@ -94,7 +117,7 @@ with t2:
             req_skills, 
             base, 
             distance, 
-            reb_affinity)
+            affinity_as_float(reb_affinity))
         # Display suggested rebel developers
         st.json(developers)
 

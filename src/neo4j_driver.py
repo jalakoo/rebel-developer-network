@@ -15,7 +15,7 @@ driver = GraphDatabase.driver(host, auth=basic_auth(user, password))
 # logging.getLogger("neo4j").setLevel(logging.DEBUG)
 
 def execute_query(query, params={}):
-    print(f'host: {host}, user: {user}, password: {password}')
+    # print(f'host: {host}, user: {user}, password: {password}')
     # Using experimental API
     try:
         with GraphDatabase.driver(host, auth=basic_auth(user, password)) as driver:
