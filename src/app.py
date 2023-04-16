@@ -76,7 +76,6 @@ RETURN DISTINCT p.name as name, s.name as homeworld, collect(DISTINCT t.name) as
 col1, col2, col3 = st.columns([1,1,1])
 with col1:
     st.write('')
-    # TODO: Animations? More data?
 with col2:
     st.image('./media/hack_it.png')
 with col3:
@@ -86,10 +85,10 @@ with col3:
 # st.title("Rebel Developers Network")
 # st.markdown("<h1 style='text-align: center; color: white;'>Rebel Developers Network</h1>", unsafe_allow_html=True)
 
-t1, t2 = st.tabs(["Dashboard", " Search"])
+t1, t2 = st.tabs(["Dashboard", " Manual Search"])
 with t1:
     # Building mode
-    components.iframe("http://neodash.graphapp.io/", height=1000, scrolling=False)
+    components.iframe("https://neodash.graphapp.io/", height=1000, scrolling=False)
 
     # TODO:
     # View only mode

@@ -8,6 +8,7 @@ neo4j = "*"
 streamlit = "*"
 openai = "*"
 streamlit-chat = "*"
+streamlit-elements = "*"
 
 [dev-packages]
 
