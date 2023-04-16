@@ -41,17 +41,14 @@ def find_developers(
     reb_affinity: float
 ) -> list[str]:
     
-    # query = f"""
-    # MATCH (t:Topic)<-[r:KNOWS]-(p:Person)-[f:FROM]->(s:System), (o:System)-[d:CONNECTED_TO*1..{distance}]->(o2:System), (p)-[:KNOWS]->(c:Character)
-    # WHERE t.name in $req_skills AND o2.name = $base AND o.name = s.name
-    # RETURN DISTINCT p.name as name, s.name as homeworld LIMIT $team_size
-# """
-    query =f"""
-    MATCH (t:Topic)<-[r:KNOWS]-(p:Person)-[f:FROM]->(s:System), (o:System)-[d:CONNECTED_TO*1..{distance}]->(o2:System), (p)-[:KNOWS]->(c:Character)
-    WHERE t.name in $req_skills AND o2.name = $base AND o.name = s.name 
-    WITH p, t, s, c, avg(c.rebel_affinity) as avg_affinity
-    WHERE avg_affinity >= {reb_affinity}
-    RETURN DISTINCT p.name as name, s.name as homeworld, t as skills, c as associates, avg_affinity LIMIT $team_size
+    query = f"""
+MATCH (p:Person)-[:KNOWS]->(t:Topic)
+MATCH (p)-[f:FROM]->(s:System)-[d:CONNECTED_TO|NEAR*0..{distance}]->(s2:System)
+MATCH (p)-[:KNOWS]->(c:Character)
+WHERE ANY (name IN t.name WHERE name in $req_skills) AND s2.name = $base
+WITH p, t, s, c, avg(c.rebel_affinity) as avg_affinity
+WHERE avg_affinity >= {reb_affinity}
+RETURN DISTINCT p.name as name, s.name as homeworld, collect(DISTINCT t.name) as skills, collect(DISTINCT c.name) as associates, avg_affinity LIMIT $team_size
     """
     params = {
         'req_skills': req_skills,
@@ -100,7 +97,7 @@ with t1:
 with t2:
     with st.expander("Advanced Options"):
         team_size = st.slider("Team Size", 1, 12, 6)
-        req_skills = st.multiselect("Required programming skills", programming_languages_list())
+        req_skills = st.multiselect("Team programming skills", programming_languages_list(), help="Select the programming languages needed for the team. Can be spread among team members.")
 
         t2c1, t2c2 = st.columns([1,1])
         with t2c1:
