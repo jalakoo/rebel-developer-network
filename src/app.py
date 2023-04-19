@@ -11,7 +11,8 @@ import random
 import datetime
 
 # Config
-openai.api_key = st.secrets['OPENAI_KEY']
+# openai.api_key = st.secrets['OPENAI_KEY']
+DEFAULT_TIME_CUTOFF = st.secrets['DEFAULT_TIME_CUTOFF_MINUTES']
 st.set_page_config(layout="wide")
 
 # Functions
@@ -64,6 +65,28 @@ def affinity_as_float(affinity:str)-> float:
     else:
         return 1.0
 
+
+LANGUAGE_KEY = "Language"
+COUNT_KEY = "Developers who know"
+
+def get_current_top_skills():
+    query = f"""
+MATCH (:Person)-[:KNOWS]->(t:Topic)
+RETURN DISTINCT t.name as name, count(t.name) as count
+ORDER BY count DESC LIMIT 10
+    """
+    records = execute_query(query)
+    result = []
+    for r in records:
+        result.append(
+            {
+                LANGUAGE_KEY: r.get('name'),
+                COUNT_KEY: r.get('count')
+            }
+        )
+    return result
+
+@st.cache_data
 def find_developers(
     team_size: int,
     req_skills: list[str],
@@ -101,12 +124,10 @@ RETURN DISTINCT p.name as name, s.name as homeworld, collect(DISTINCT t.name) as
         })
     return result
 
-
 def devs_with_rank_info(
     base: str,
     cutoff_datetime: datetime
 ):
-    
     if cutoff_datetime is None:
         # Set to 1/1/1970
         cutoff_datetime = datetime.datetime.utcfromtimestamp(0)
@@ -131,7 +152,7 @@ RETURN DISTINCT p.name as name, toString(p.created_at) as createdAt, p.email as 
         created_at = datetime.datetime.fromisoformat(created_at_string)
         dev = Person(
             name=r.get('name', None), 
-            email=r.get('email', None),
+            # email=r.get('email', None),
             homeworld=r.get('homeworld', None), 
             created_at=created_at,
             skills=r.get('devSkills', None), 
@@ -155,9 +176,11 @@ def devs_ranked(
         skill_points = 0.0
         affinity_points = 0.0
         distance_points = 0.0
+        dev.matching_skills = 0
         for skill in skills:
             if skill in dev.skills:
                 skill_points += skills_points_per
+                dev.matching_skills += 1
         if dev.avg_associate_affinity is None or dev.avg_associate_affinity < associate_rebel_affinity:
             affinity_points = 0
         else:
@@ -170,10 +193,13 @@ def devs_ranked(
         dev_score += affinity_points
         dev_score += distance_points
         dev.ranking_score = dev_score
+
     # Return list of devs ranked
     return sorted(devs, key=lambda x: x.ranking_score, reverse=True)
 
 # UI
+
+# HEADER BLOCK
 # Convulted way to center image
 col1, col2, col3 = st.columns([1,1,1])
 with col1:
@@ -184,18 +210,34 @@ with col1:
     if enable_time_filter:
         now = datetime.datetime.now()
         date_cutoff = st.date_input('Date cutoff', now)
-        time_cutoff = st.time_input('Time from', now - datetime.timedelta(minutes=15))
+        time_cutoff = st.time_input('Time from', now - datetime.timedelta(minutes=DEFAULT_TIME_CUTOFF))
         date_cutoff = datetime.datetime.combine(date_cutoff, time_cutoff)
 with col2:
     st.image('./media/hack_it.png')
 with col3:
     st.write('')
-    # TODO: Animations? More data?
+    # Base location
+    base1, base2 = st.columns(2)
+    with base1:
+        rebel_bases = possible_rebel_system_names()
+        if st.button("Change Base Location"):
+            rebel_base = random.choice(rebel_bases)
+    with base2:
+        if len(rebel_bases) == 0:
+            st.write("No rebel bases found")
+        else:
+            rebel_base = random.choice(rebel_bases)
+            st.write(f"Current Location: {rebel_base}")
+    
+    # Top skills
+    st.write('Top skills in network:')
+    top_skills = get_current_top_skills()
+    st.table(top_skills)
 
 # st.title("Rebel Developers Network")
 # st.markdown("<h1 style='text-align: center; color: white;'>Rebel Developers Network</h1>", unsafe_allow_html=True)
 
-t1, t2, t3 = st.tabs(["Manual Search", "Ranking", "Data"])
+t1, t2, t3 = st.tabs(["Manual Search", "Ranking", "Data Analysis"])
 with t1:
     with st.expander("Advanced Options"):
         team_size = st.slider("Team Size", 1, 12, 6)
@@ -221,28 +263,27 @@ with t1:
         st.json(developers)
 
 with t2:
-    with st.expander("Ranking Rules"):
-        # Base location
-        rebel_bases = possible_rebel_system_names()
-        if len(rebel_bases) == 0:
-            st.write("No rebel bases found")
-            st.stop()
-        else:
-            rebel_base = random.choice(rebel_bases)
-            st.write(f"Rebel Base: {rebel_base}")
+    with st.expander("Ranking Rubric"):
 
-        # Desired Skills
-        req_skills = st.multiselect("Team programming skills", programming_languages_list(), help="Select the programming languages needed for the team. Can be spread among team members.", key="ranking_req_skills")
+        rules1, rules2, rules3 = st.columns([1,1,1])
+        with rules1:
+            st.write("Skills")
+            # Default skills
+            top_3_skills = [t.get(LANGUAGE_KEY, None) for t in top_skills[:3]]
 
-        # Distance Scoring
-        distance_score = st.slider("Max Distance Score", 1, 100, 10)
-        distance_score_dropoff = st.slider("Distance Score Dropoff/jump", 0.0, 10.0, 1.0)
-
-        # Skills Scoring
-        skills_score = st.slider("Points per matching skill", 0, 100, 10)
-
-        # Trustability Scoring
-        trust_score = st.slider("Points per average associate affinity", 0, 100, 10, help="Points per average affinity of associates. Associates are people who know the developer and are also rebel sympathizers. This many points will be assigned for matching the requirement level + this number of points for each .1 above the requirement level.")
+            # Desired Skills
+            req_skills = st.multiselect(label="Team programming skills", options=programming_languages_list(), default = top_3_skills, help="Select the programming languages needed for the team. Can be spread among team members.", key="ranking_req_skills")
+            # Skills Scoring
+            skills_score = st.slider("Points per matching skill", 0, 100, 10)
+        with rules2:
+            st.write("Distance")
+            # Distance Scoring
+            distance_score = st.slider("Max Distance Score", 1, 100, 10)
+            distance_score_dropoff = st.slider("Distance Score Dropoff/jump", 0.0, 10.0, 1.0)
+        with rules3:
+            st.write("Trustability")
+            # Trustability Scoring
+            trust_score = st.slider("Points per average associate affinity", 0, 100, 10, help="Points per average affinity of associates. Associates are people who know the developer and are also rebel sympathizers. This many points will be assigned for matching the requirement level + this number of points for each .1 above the requirement level.")
     
     devs = devs_with_rank_info(
         rebel_base,
@@ -258,10 +299,8 @@ with t2:
         distance_decay_per_jump=distance_score_dropoff
     )
     st.write("Developers Ranked")
-    st.json(devs_ranked)        
-        
-    
-    # Display list of developers by ranking
+    st.table(devs_ranked)        
+            
 
 with t3:
     # Building mode
