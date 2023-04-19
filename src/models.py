@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import datetime
 
 @dataclass
 class Person:
@@ -7,6 +8,7 @@ class Person:
     skills: list[str]
     associates: list[str]
     homeworld: str
+    created_at: datetime
     matching_skills: int = 0
     jumps_from_base: int = 0
     avg_associate_affinity: float = 0.0

@@ -8,6 +8,7 @@ from utils import list_from_csv
 from constants import STAR_WARS_SYSTEMS
 from models import Person, System
 import random
+import datetime
 
 # Config
 openai.api_key = st.secrets['OPENAI_KEY']
@@ -102,29 +103,37 @@ RETURN DISTINCT p.name as name, s.name as homeworld, collect(DISTINCT t.name) as
 
 
 def devs_with_rank_info(
-    base: str
+    base: str,
+    cutoff_datetime: datetime
 ):
+    
+    if cutoff_datetime is None:
+        # Set to 1/1/1970
+        cutoff_datetime = datetime.datetime.utcfromtimestamp(0)
     query = f"""
 MATCH (p:Person)-[r:KNOWS]->(t:Topic),
 (p)-[:FROM]->(s:System),
 (p)-[:KNOWS]->(c:Character),
 (base:System),
 path = shortestPath((s)-[:CONNECTED_TO|NEAR*0..100]-(base))
-WHERE base.name = $base
+WHERE base.name = $base AND p.created_at >= datetime($datetime_cutoff)
 WITH p, t, c, s, path
-RETURN DISTINCT p.name as name, p.email as email, s.name as homeworld, collect(DISTINCT c.name) as associates, collect(DISTINCT t.name) as devSkills, avg(c.rebel_affinity) as avg_associate_affinity, count(nodes(path)) as jumpsFromBase
+RETURN DISTINCT p.name as name, toString(p.created_at) as createdAt, p.email as email, s.name as homeworld, collect(DISTINCT c.name) as associates, collect(DISTINCT t.name) as devSkills, avg(c.rebel_affinity) as avg_associate_affinity, count(nodes(path)) as jumpsFromBase
     """
     params ={
-        'base': base
+        'base': base,
+        'datetime_cutoff': cutoff_datetime.isoformat()
     }
     response = execute_query(query, params)
     result = []
     for r in response:
-        print(f'record: {r}')
+        created_at_string = r.get('createdAt', None)
+        created_at = datetime.datetime.fromisoformat(created_at_string)
         dev = Person(
             name=r.get('name', None), 
             email=r.get('email', None),
             homeworld=r.get('homeworld', None), 
+            created_at=created_at,
             skills=r.get('devSkills', None), 
             associates=r.get('associates', None), 
             avg_associate_affinity=r.get('avg_associate_affinity', None),
@@ -169,6 +178,14 @@ def devs_ranked(
 col1, col2, col3 = st.columns([1,1,1])
 with col1:
     st.write('')
+    # Enable time based filtering
+    enable_time_filter = st.checkbox('Filter by registration datetime')
+    date_cutoff = None
+    if enable_time_filter:
+        now = datetime.datetime.now()
+        date_cutoff = st.date_input('Date cutoff', now)
+        time_cutoff = st.time_input('Time from', now - datetime.timedelta(minutes=15))
+        date_cutoff = datetime.datetime.combine(date_cutoff, time_cutoff)
 with col2:
     st.image('./media/hack_it.png')
 with col3:
@@ -178,7 +195,7 @@ with col3:
 # st.title("Rebel Developers Network")
 # st.markdown("<h1 style='text-align: center; color: white;'>Rebel Developers Network</h1>", unsafe_allow_html=True)
 
-t1, t2, t3 = st.tabs([" Manual Search", "Ranking", "Data"])
+t1, t2, t3 = st.tabs(["Manual Search", "Ranking", "Data"])
 with t1:
     with st.expander("Advanced Options"):
         team_size = st.slider("Team Size", 1, 12, 6)
@@ -204,7 +221,6 @@ with t1:
         st.json(developers)
 
 with t2:
-    st.write("TODO")
     with st.expander("Ranking Rules"):
         # Base location
         rebel_bases = possible_rebel_system_names()
@@ -228,7 +244,10 @@ with t2:
         # Trustability Scoring
         trust_score = st.slider("Points per average associate affinity", 0, 100, 10, help="Points per average affinity of associates. Associates are people who know the developer and are also rebel sympathizers. This many points will be assigned for matching the requirement level + this number of points for each .1 above the requirement level.")
     
-    devs = devs_with_rank_info(rebel_base)
+    devs = devs_with_rank_info(
+        rebel_base,
+        date_cutoff
+        )
     devs_ranked = devs_ranked(
         devs=devs,
         skills=req_skills,
