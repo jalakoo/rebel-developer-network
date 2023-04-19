@@ -149,7 +149,9 @@ RETURN DISTINCT p.name as name, toString(p.created_at) as createdAt, p.email as 
     result = []
     for r in response:
         created_at_string = r.get('createdAt', None)
-        created_at = datetime.datetime.fromisoformat(created_at_string)
+        created_at = datetime.datetime.strptime(created_at_string, '%Y-%m-%dT%H:%M:%S.%fZ')
+        # Below fails in streamlit cloud (using an older version of Python currently?)
+        # created_at = datetime.datetime.fromisoformat(created_at_string) 
         dev = Person(
             name=r.get('name', None), 
             # email=r.get('email', None),
