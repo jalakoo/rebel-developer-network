@@ -69,11 +69,11 @@ def affinity_as_float(affinity:str)-> float:
 LANGUAGE_KEY = "Language"
 COUNT_KEY = "Developers who know"
 
-def get_current_top_skills():
+def get_current_top_skills(max: int = 10):
     query = f"""
 MATCH (:Person)-[:KNOWS]->(t:Topic)
 RETURN DISTINCT t.name as name, count(t.name) as count
-ORDER BY count DESC LIMIT 10
+ORDER BY count DESC LIMIT {max}
     """
     records = execute_query(query)
     result = []
@@ -233,7 +233,7 @@ with col3:
     
     # Top skills
     st.write('Top skills in network:')
-    top_skills = get_current_top_skills()
+    top_skills = get_current_top_skills(st.secrets["TOP_SKILLS_TO_SHOW"])
     st.table(top_skills)
 
 # st.title("Rebel Developers Network")
